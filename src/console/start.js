@@ -1,6 +1,6 @@
 import { startConsole } from './server.js';
 
-const app = await startConsole();
+const app = await startConsole(process.env.DSH_CONTAINER === '1' ? { port: 8080, host: '0.0.0.0' } : {});
 console.log('CTF Workbench ' + app.launchUrl);
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, async () => {

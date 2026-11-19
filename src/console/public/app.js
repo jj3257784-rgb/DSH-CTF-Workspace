@@ -239,11 +239,12 @@ function updateCreateTools() {
   el('create').elements.authorized_scope.value = category === 'web' ? 'http://127.0.0.1:' : 'local-only';
   const fieldset = el('tool-options');
   fieldset.replaceChildren(node('legend','可选工具'));
-  for (const tool of tools.filter(item => item.execution_enabled && item.supported_categories.includes(category))) {
+  for (const tool of tools.filter(item => item.tool_id !== 'gdb' && item.supported_categories.includes(category))) {
     const label = node('label');
     const check = node('input');
     check.type = 'checkbox'; check.name = 'requested_tools'; check.value = tool.tool_id;
-    label.append(check, document.createTextNode(tool.tool_id));
+    check.disabled = !tool.execution_enabled;
+    label.append(check, document.createTextNode(tool.tool_id + (check.disabled ? '（未安装或指纹不匹配）' : '')));
     fieldset.append(label);
   }
 }

@@ -2,6 +2,14 @@ import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const inventory = JSON.parse(readFileSync(new URL('../../knowledge/metadata/tools.json', import.meta.url), 'utf8'));
+const nodeHash = createHash('sha256').update(readFileSync(process.execPath)).digest('hex');
+for (const tool of inventory) {
+  if (tool.executable_path === 'node') {
+    tool.executable_path = process.execPath;
+    tool.executable_sha256 = nodeHash;
+    tool.version = process.versions.node;
+  }
+}
 const registry = new Map(inventory.map(tool => [tool.tool_id, tool]));
 const externalTools = new Set(['python-local', 'curl-local', 'strings-local', 'archive-local']);
 

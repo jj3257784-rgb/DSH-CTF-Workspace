@@ -2,6 +2,12 @@
 
 独立的 Node.js 24 原型。普通 DSH 聊天不经过本工作区的总控检查。`npm test` 运行单元、集成及离线烟雾测试。测试需要存在 `data` 目录，并在其中创建临时任务。外部工具使用 `knowledge/metadata/tools.json` 登记的本机路径和指纹。
 
+## 启动工作台
+
+安装 Node.js 24 后运行 `npm start`，打开终端输出的完整本地链接。内置解码示例使用 Misc 类别和 `sample.b64`。原生运行时，外部工具需匹配工具清单里的路径和指纹。
+
+完整环境需要支持 Linux 容器的 Docker 和 Compose。运行 `docker compose up --build`，打开日志中的完整链接。首次构建需要联网下载依赖，构建会检查工具可用性并运行测试。控制台使用本机 8080 端口，任务存入 Docker 卷。在线模型另需自己的服务地址和凭据。
+
 ## 接口
 
 - Gateway 的 `createTask({ challenge_type, authorized_scope, budget_limit })` 返回冻结的任务决策。Web 的授权范围是一个明确的 `http://127.0.0.1:端口` 来源，其他题型使用 `local-only`。拒绝决策包含 `rejection_reason`。

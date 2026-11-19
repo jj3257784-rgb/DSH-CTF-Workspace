@@ -65,7 +65,7 @@ function fileList(root, detail) {
   });
 }
 
-export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/misc', port = 0 } = {}) {
+export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/misc', port = 0, host = '127.0.0.1' } = {}) {
   const root = resolve(dataRoot);
   const core = createWorkspace(root, fixtureRoot);
   const permits = new Map();
@@ -164,7 +164,7 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
       });
     }
   });
-  server.listen(port, '127.0.0.1');
+  server.listen(port, host);
   await once(server, 'listening');
   origin = 'http://127.0.0.1:' + server.address().port;
   return {
