@@ -1,0 +1,19 @@
+name: Clean clone verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  workbench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image and run full test suite
+        run: docker compose build --no-cache
+      - name: Verify published local console
+        run: |
+          docker compose up --detach
+          curl --fail --silent --show-error --retry 15 --retry-connrefused http://127.0.0.1:8080/ --output /dev/null
+          docker compose exec -T workbench node --input-type=module -e "import {listTools} from './src/executor/tool-registry.js'; const tools=listTools().filter(t=>t.execution_enabled); console.log(tools.map(t=>t.tool_id)); if(tools.length!==8)process.exit(1)"
+      - if: always()
+        run: docker compose down --volumes
