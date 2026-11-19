@@ -6,3 +6,5 @@ skills/*/SKILL.md text eol=crlf
 knowledge/methods/crypto-method-card.md text eol=crlf
 knowledge/methods/web-method-card.md text eol=crlf
 fixtures/misc/sample.b64 text eol=crlf
+knowledge/methods/*.md -text !eol
+skills/*/SKILL.md -text !eol
