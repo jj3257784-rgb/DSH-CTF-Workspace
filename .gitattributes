@@ -2,3 +2,7 @@
 *.zip binary
 *.png binary
 *.wav binary
+skills/*/SKILL.md text eol=crlf
+knowledge/methods/crypto-method-card.md text eol=crlf
+knowledge/methods/web-method-card.md text eol=crlf
+fixtures/misc/sample.b64 text eol=crlf
