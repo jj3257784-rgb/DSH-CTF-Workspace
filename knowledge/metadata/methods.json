@@ -1,0 +1,42 @@
+[
+  {
+    "type": "web",
+    "id": "web-method-card",
+    "tags": [
+      "http"
+    ],
+    "source": "knowledge/methods/web-method-card.md"
+  },
+  {
+    "type": "pwn",
+    "id": "pwn-method-card",
+    "tags": [
+      "elf"
+    ],
+    "source": "knowledge/methods/pwn-method-card.md"
+  },
+  {
+    "type": "reverse",
+    "id": "reverse-method-card",
+    "tags": [
+      "static"
+    ],
+    "source": "knowledge/methods/reverse-method-card.md"
+  },
+  {
+    "type": "crypto",
+    "id": "crypto-method-card",
+    "tags": [
+      "math"
+    ],
+    "source": "knowledge/methods/crypto-method-card.md"
+  },
+  {
+    "type": "misc",
+    "id": "misc-method-card",
+    "tags": [
+      "encoding"
+    ],
+    "source": "knowledge/methods/misc-method-card.md"
+  }
+]

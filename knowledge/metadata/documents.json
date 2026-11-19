@@ -1,0 +1,120 @@
+[
+  {
+    "document_id": "web-method-card",
+    "title": "web 方法卡",
+    "category": "web",
+    "tags": [
+      "http"
+    ],
+    "summary": "HTTP 授权、回环请求、响应与重定向",
+    "source_path": "methods/web-method-card.md",
+    "version": "1.0.0",
+    "content_hash": "sha256:91904c0fa741a9c8a8281a7a051596e0aae7a92bebe5e26ee62a74b30a35d581",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "pwn-method-card",
+    "title": "pwn 方法卡",
+    "category": "pwn",
+    "tags": [
+      "elf",
+      "gnu_stack",
+      "gnu_relro",
+      "pie"
+    ],
+    "summary": "ELF 文件、保护机制和静态分析。只读检查 ELF 栈权限、PIE 和重定位只读保护",
+    "source_path": "methods/pwn-method-card.md",
+    "version": "1.1.0",
+    "content_hash": "sha256:6d60db15c8fdf15a947fef02b3271c8db6133d3d52372f11df6cea8e0c9f9043",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "reverse-method-card",
+    "title": "reverse 方法卡",
+    "category": "reverse",
+    "tags": [
+      "static",
+      "pe",
+      "coff",
+      "dwarf"
+    ],
+    "summary": "文件识别、反编译、控制流和静态推断。识别 Windows 可执行文件头，区分调试信息和符号表",
+    "source_path": "methods/reverse-method-card.md",
+    "version": "1.1.0",
+    "content_hash": "sha256:2ceb0fc3bb16bccb123c08bc350fb2d4bc7415511be4261891fb712b80eac479",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "crypto-method-card",
+    "title": "crypto 方法卡",
+    "category": "crypto",
+    "tags": [
+      "math"
+    ],
+    "summary": "算法、数学关系、中间计算与反向验证",
+    "source_path": "methods/crypto-method-card.md",
+    "version": "1.0.0",
+    "content_hash": "sha256:861df46fafa82728f7b3b96d98d595936f17d99a1ec11faddf05e50cc5780a08",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "misc-method-card",
+    "title": "misc 方法卡",
+    "category": "misc",
+    "tags": [
+      "encoding",
+      "pcapng",
+      "snaplen"
+    ],
+    "summary": "文件哈希、编码、Base64 与转换重放。抓包只保存了部分报文，核对捕获长度、原始长度和截断原因",
+    "source_path": "methods/misc-method-card.md",
+    "version": "1.1.0",
+    "content_hash": "sha256:284cc7f518efe4345dc6246d4bbcb989ff6d2d9b0c25407757337de1fcac25e1",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "png-structure-triage",
+    "title": "PNG 结构诊断",
+    "category": "misc",
+    "tags": [
+      "png",
+      "ihdr",
+      "crc"
+    ],
+    "summary": "根据 PNG 签名、块边界和 CRC 区分截断、校验异常与解码故障",
+    "source_path": "methods/png-structure-triage.md",
+    "version": "1.0.0",
+    "content_hash": "sha256:a423308ca23622a21af2b18e4a994cc38f92f6558bb101696fb733e248c062c4",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "zip-directory-triage",
+    "title": "ZIP 目录与截断诊断",
+    "category": "misc",
+    "tags": [
+      "zip",
+      "eocd",
+      "zip64"
+    ],
+    "summary": "用 EOCD 和中央目录边界定位归档截断与误识别",
+    "source_path": "methods/zip-directory-triage.md",
+    "version": "1.0.0",
+    "content_hash": "sha256:306f73af806f053d1fbdf8adf09f3e0e9d3af2b1878dcbf28d9b5f2382a8e352",
+    "trust": "reference-only"
+  },
+  {
+    "document_id": "wave-chunk-triage",
+    "title": "RIFF WAVE 音频块边界诊断",
+    "category": "misc",
+    "tags": [
+      "riff",
+      "wave",
+      "pcm"
+    ],
+    "summary": "定位 WAV 音频负载、块对齐与容器尾部差异",
+    "source_path": "methods/wave-chunk-triage.md",
+    "version": "1.0.2",
+    "content_hash": "sha256:91c6644c37d3b3f97619b5a5d7885debd6fa7b3aa3d80d6b574ed35cf2ef0bcc",
+    "trust": "reference-only"
+  }
+]

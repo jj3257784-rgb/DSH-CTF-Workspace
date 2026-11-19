@@ -1,0 +1,28 @@
+{
+  "id": "ctf-pwn",
+  "name": "ctf-pwn",
+  "version": "1.0.0",
+  "category": "pwn",
+  "description": "静态分析二进制利用题",
+  "triggers": [
+    "ELF",
+    "栈溢出",
+    "格式化字符串",
+    "堆"
+  ],
+  "exclusions": [
+    "动态运行不可信附件",
+    "无授权服务"
+  ],
+  "required_capabilities": [],
+  "safety_constraints": [
+    "仅静态分析",
+    "禁止动态执行"
+  ],
+  "entrypoint": "SKILL.md",
+  "evidence_requirements": [
+    "样本哈希",
+    "ELF 头与保护证据",
+    "推断标记"
+  ]
+}

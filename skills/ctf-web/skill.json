@@ -1,0 +1,34 @@
+{
+  "id": "ctf-web",
+  "name": "ctf-web",
+  "version": "1.0.0",
+  "category": "web",
+  "description": "分析获授权的 HTTP 应用题",
+  "triggers": [
+    "HTTP",
+    "认证与授权",
+    "SQLi",
+    "XSS",
+    "SSRF",
+    "上传",
+    "业务逻辑"
+  ],
+  "exclusions": [
+    "未授权站点",
+    "真实账户或生产数据"
+  ],
+  "required_capabilities": [
+    "web-local"
+  ],
+  "safety_constraints": [
+    "回环来源白名单",
+    "禁止跟随重定向"
+  ],
+  "entrypoint": "SKILL.md",
+  "evidence_requirements": [
+    "授权决策",
+    "请求摘要",
+    "响应状态与摘要",
+    "本地答案验证"
+  ]
+}

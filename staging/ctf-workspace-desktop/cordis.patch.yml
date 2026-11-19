@@ -1,0 +1,5 @@
+- insert:
+    - id: ctf-workspace-desktop
+      name: dsh-ctf-workspace-desktop
+      config:
+        workspaceId: f76f2828-23bc-4478-91fa-324ce55fccc1

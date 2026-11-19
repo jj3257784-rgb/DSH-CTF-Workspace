@@ -1,0 +1,28 @@
+{
+  "id": "ctf-reverse",
+  "name": "ctf-reverse",
+  "version": "1.0.0",
+  "category": "reverse",
+  "description": "静态还原程序逻辑",
+  "triggers": [
+    "反编译",
+    "控制流",
+    "算法",
+    "字符串"
+  ],
+  "exclusions": [
+    "动态执行",
+    "调试不可信进程"
+  ],
+  "required_capabilities": [],
+  "safety_constraints": [
+    "仅静态分析",
+    "动态事实须有独立证据"
+  ],
+  "entrypoint": "SKILL.md",
+  "evidence_requirements": [
+    "样本哈希",
+    "偏移或地址",
+    "静态事实和推断"
+  ]
+}

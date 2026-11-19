@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTF Workbench</title>
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<header class="mast">
+  <div><p class="eyebrow">LOCAL / CTF</p><h1>CTF Workbench</h1><p>任务、执行与证据工作区</p></div>
+  <span class="connection" id="connection">正在连接</span>
+</header>
+<main>
+  <section aria-label="工作区首页" class="overview">
+    <div id="stats" class="stats"></div>
+    <details id="create-panel">
+      <summary>新建任务</summary>
+      <form id="create">
+        <label>题目名称<input name="title" maxlength="120" required placeholder="例如 本地 Base64 练习"></label>
+        <label>题型<select name="challenge_type" id="category"></select></label>
+        <label>授权范围<input name="authorized_scope" required value="local-only"></label>
+        <label>知识关键词<input name="query" maxlength="1024" placeholder="可选"></label>
+        <fieldset id="tool-options"><legend>可选工具</legend></fieldset>
+        <button type="submit">创建并检查</button>
+      </form>
+    </details>
+  </section>
+  <div class="layout">
+    <aside>
+      <h2>任务列表</h2>
+      <div class="filters">
+        <label>题型<select id="filter-category"><option value="">全部</option></select></label>
+        <label>状态<select id="filter-status"><option value="">全部</option></select></label>
+        <label>排序<select id="filter-order"><option value="newest">最近创建</option><option value="oldest">最早创建</option></select></label>
+      </div>
+      <ul id="tasks" aria-label="最近任务与历史任务"></ul>
+    </aside>
+    <section class="workspace">
+      <p id="feedback" role="status" aria-live="polite"></p>
+      <p id="empty">选择任务查看详情，或创建一个本地合成任务。</p>
+      <article id="task" hidden>
+        <div class="task-heading">
+          <div><p class="eyebrow" id="task-id"></p><h2 id="task-title"></h2></div>
+          <a id="report" class="button">导出 JSON</a>
+        </div>
+        <dl id="facts"></dl>
+        <section class="controls">
+          <button data-action="pause">暂停</button>
+          <button data-action="resume">继续</button>
+          <button data-action="close" class="danger">关闭任务</button>
+        </section>
+        <details open>
+          <summary>执行操作</summary>
+          <form id="execute">
+            <label>工具<select id="tool" name="tool_id" required></select></label>
+            <label>操作 ID<input name="operation_id" required maxlength="64" value="sample"></label>
+            <div id="arguments"></div>
+            <button type="submit">执行</button>
+          </form>
+          <details id="execution-output" hidden><summary>本次执行结果</summary><pre id="output"></pre></details>
+        </details>
+        <details>
+          <summary>候选 Flag 与本地验证</summary>
+          <form id="verify">
+            <label>操作 ID<input name="operation_id" required></label>
+            <label>候选 Flag<input name="candidate" required autocomplete="off"></label>
+            <button name="intent" value="candidate">登记候选</button>
+            <button name="intent" value="verify">核对格式与工具输出</button>
+          </form>
+          <ul id="candidates"></ul>
+        </details>
+        <details>
+          <summary>附件与产物</summary>
+          <form id="attach"><label>登记附件（至多 1 MiB）<input name="file" type="file" required></label><button>登记</button></form>
+          <p class="muted">附件以只读副本登记。工具仍只使用已许可的受信 fixture。</p>
+          <ul id="files"></ul>
+        </details>
+        <details>
+          <summary>Skill 与知识来源</summary>
+          <ul id="knowledge"></ul>
+        </details>
+        <section class="timeline">
+          <h3>证据时间线</h3>
+          <ol id="evidence"></ol>
+        </section>
+      </article>
+    </section>
+  </div>
+</main>
+</body>
+</html>

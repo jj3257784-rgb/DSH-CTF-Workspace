@@ -1,0 +1,33 @@
+{
+  "id": "ctf-crypto",
+  "name": "ctf-crypto",
+  "version": "1.0.0",
+  "category": "crypto",
+  "description": "本地密码和数学题分析",
+  "triggers": [
+    "编码",
+    "古典密码",
+    "对称",
+    "非对称",
+    "哈希",
+    "签名",
+    "模运算"
+  ],
+  "exclusions": [
+    "真实密钥",
+    "外部认证尝试"
+  ],
+  "required_capabilities": [
+    "crypto-local"
+  ],
+  "safety_constraints": [
+    "固定合成向量",
+    "仅本地计算"
+  ],
+  "entrypoint": "SKILL.md",
+  "evidence_requirements": [
+    "输入摘要",
+    "中间计算",
+    "反向校验"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "ctf-misc",
+  "name": "ctf-misc",
+  "version": "1.0.0",
+  "category": "misc",
+  "description": "分析文件、编码与取证杂项",
+  "triggers": [
+    "文件头尾",
+    "Base64",
+    "压缩",
+    "隐写",
+    "图像音频",
+    "流量",
+    "元数据",
+    "carving"
+  ],
+  "exclusions": [
+    "执行附件",
+    "越界读取",
+    "真实用户资料"
+  ],
+  "required_capabilities": [
+    "misc-local"
+  ],
+  "safety_constraints": [
+    "先哈希原件",
+    "只读受信夹具"
+  ],
+  "entrypoint": "SKILL.md",
+  "evidence_requirements": [
+    "源哈希",
+    "参数",
+    "产物哈希",
+    "重放"
+  ]
+}

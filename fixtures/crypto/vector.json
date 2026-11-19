@@ -1,0 +1,5 @@
+{
+  "ciphertext": "4c464b4d515a424b594f1b48754958535a5e4557",
+  "key": 42,
+  "expected": "flag{phase1b_crypto}"
+}

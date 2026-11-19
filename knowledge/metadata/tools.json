@@ -1,0 +1,267 @@
+[
+  {
+    "tool_id": "web-local",
+    "name": "Node HTTP",
+    "version": "24.18.1",
+    "executable_path": "D:/Program Files/node.exe",
+    "executable_sha256": "ac51903c4c111815d52280b1fdcc8da067cbb37e2fe1a765097b85c3292c8582",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "web"
+    ],
+    "supported_operations": [
+      "http-get"
+    ],
+    "allowed_arguments": [
+      "url"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "authorized-loopback",
+    "execution_risk": "local-http",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "crypto-local",
+    "name": "Node Crypto",
+    "version": "24.18.1",
+    "executable_path": "D:/Program Files/node.exe",
+    "executable_sha256": "ac51903c4c111815d52280b1fdcc8da067cbb37e2fe1a765097b85c3292c8582",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "crypto"
+    ],
+    "supported_operations": [
+      "xor"
+    ],
+    "allowed_arguments": [
+      "ciphertext",
+      "key"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "fixed-calculation",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "misc-local",
+    "name": "Node Base64",
+    "version": "24.18.1",
+    "executable_path": "D:/Program Files/node.exe",
+    "executable_sha256": "ac51903c4c111815d52280b1fdcc8da067cbb37e2fe1a765097b85c3292c8582",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "misc"
+    ],
+    "supported_operations": [
+      "base64-decode"
+    ],
+    "allowed_arguments": [
+      "file"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "trusted-fixture",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "static-local",
+    "name": "Node Static",
+    "version": "24.18.1",
+    "executable_path": "D:/Program Files/node.exe",
+    "executable_sha256": "ac51903c4c111815d52280b1fdcc8da067cbb37e2fe1a765097b85c3292c8582",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "pwn",
+      "reverse",
+      "misc"
+    ],
+    "supported_operations": [
+      "inspect-header"
+    ],
+    "allowed_arguments": [
+      "file"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "static-bytes",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "python-local",
+    "name": "Python",
+    "version": "3.12.14",
+    "executable_path": "C:/Users/JIANG/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe",
+    "executable_sha256": "6978056b764c5764c079555bfed352141c49af6273bc879165040019f12c6841",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "crypto"
+    ],
+    "supported_operations": [
+      "xor"
+    ],
+    "allowed_arguments": [
+      "ciphertext",
+      "key"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "fixed-calculation",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "curl-local",
+    "name": "curl",
+    "version": "8.14.1",
+    "executable_path": "C:/Windows/System32/curl.exe",
+    "executable_sha256": "26732957d586965a2d37d24ac8f384c6502a730dfd9d35212980712a20dc2291",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "web"
+    ],
+    "supported_operations": [
+      "http-get"
+    ],
+    "allowed_arguments": [
+      "url"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "authorized-loopback",
+    "execution_risk": "local-http",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "strings-local",
+    "name": "GNU strings",
+    "version": "2.45",
+    "executable_path": "D:/Program Files/mingw64/bin/strings.exe",
+    "executable_sha256": "3e0aee05b85dd628c0bc4c499f4cf7e1143e37e9c2f7fefdf5240aae1eadd762",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "pwn",
+      "reverse",
+      "misc"
+    ],
+    "supported_operations": [
+      "extract-strings"
+    ],
+    "allowed_arguments": [
+      "file"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "raw-static-bytes",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  },
+  {
+    "tool_id": "archive-local",
+    "name": "7-Zip",
+    "version": "26.02",
+    "executable_path": "D:/Program Files/7-Zip/7z.exe",
+    "executable_sha256": "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": true,
+    "supported_categories": [
+      "misc"
+    ],
+    "supported_operations": [
+      "list-fixture"
+    ],
+    "allowed_arguments": [
+      "file"
+    ],
+    "timeout_limit": 5000,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "pinned-archive-list",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ],
+    "fixture_sha256": "b2a04b7f19cb4cee18a52e3dd472604eb817fc94d648cb45b4e1f1a92efa5aab"
+  },
+  {
+    "tool_id": "gdb",
+    "name": "GDB",
+    "version": "16.3",
+    "executable_path": "D:/Program Files/mingw64/bin/gdb.exe",
+    "executable_sha256": "592bcfc22985a929f3f24eb95e0fd3aec536da87b799d61992aff06452f54d98",
+    "available_status": "VERIFIED_AVAILABLE",
+    "execution_enabled": false,
+    "supported_categories": [
+      "pwn",
+      "reverse"
+    ],
+    "supported_operations": [],
+    "allowed_arguments": [],
+    "timeout_limit": 0,
+    "output_limit": 1048576,
+    "network_policy": "none",
+    "execution_risk": "dynamic-disabled",
+    "evidence_requirements": [
+      "input_hash",
+      "exit_code",
+      "output_hash",
+      "tool_version",
+      "evidence_id"
+    ]
+  }
+]
