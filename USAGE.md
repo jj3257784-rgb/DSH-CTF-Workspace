@@ -1,5 +1,31 @@
 # DSH CTF 工作区使用说明
 
+## 安装条件与启动
+
+原生工作台需要 Git、Node.js 24 和 npm。内置样本可离线运行，外部程序需匹配工具清单中的路径和指纹。完整环境需要支持 Linux 容器的 Docker、Compose、空闲的本机 8080 端口，以及首次构建时的网络连接。
+
+~~~sh
+git clone https://github.com/jj3257784-rgb/DSH-CTF-Workspace.git
+cd DSH-CTF-Workspace
+~~~
+
+原生运行用 npm start，完整工具环境用 docker compose up --build。打开终端打印的完整链接，保留 # 后面的访问凭据。原生端口自动分配，Docker 使用 8080。按 Ctrl+C 停止前台工作台。原生任务保存在 data 目录，容器任务保存在命名卷中。运行 npm test 执行全套离线测试；Docker 构建时自动运行同一套测试。
+
+## 第一次解题：解码自带样本
+
+1. 创建 Misc 任务，使用 local-only 范围，选择 misc-local。
+2. 在“执行操作”选择 misc-local，操作 ID 填 sample，文件名填 sample.b64，点击“执行”。自带样本位于 fixtures/misc 中。
+3. 展开“本次执行结果”，解码文本应为 flag{phase1b_misc}。在“候选 Flag 与本地验证”填入同一个操作 ID 和候选值，点击“核对格式与工具输出”。
+4. 查看执行记录，点击“导出 JSON”保存结果。处理其他样本时，先确定题型、输入与授权范围，再选择工具，保存操作 ID，根据实际输出登记候选，最后核验。竞赛答案以平台提交结果为准。
+
+## 运行其他模式
+
+- Web 适配器仅接受明确授权的回环 HTTP 来源。Docker 中的 127.0.0.1 指向容器自身；要使用宿主机回环测试服务，可在宿主机原生启动。
+- 在线 Solver 需要 CTF_MODEL_NAME 和 CTF_MODEL_BASE_URL，远程 HTTPS 地址还需 CTF_MODEL_API_KEY。桌面插件需要兼容的 DSH 宿主。
+- 原生工具提示未安装或指纹不匹配时，可使用完整容器环境。Docker 引擎须先成功启动。
+
+## 桌面插件与方法卡
+
 做手动选卡对照时，在 `inspect-header` 的 `execute` 请求顶层传入 `include_method_card: false`。工具仍会返回文件头检查结果，再用 `retrieve` 单独检索。省略该字段时自动选卡照常启用。
 
 Misc 附件已放入受信的 `fixtures/misc` 目录时，可在 `start` 后用一次 `execute` 调用 `static-local` 的 `inspect-header`。例如传入 `{"file":"phase2b.zip"}`，响应同时提供大小、格式、SHA-256 和匹配的方法卡。支持 ZIP、PNG、RIFF WAVE 和规范 Base64（`.b64`）的初步识别。文件签名只用于选择方法卡，内容完整性需进一步检查。

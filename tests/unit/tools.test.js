@@ -44,7 +44,7 @@ test('Tool Web curl authenticates scope before request and records hashes', asyn
     const result=await run(core,task,'get','curl-local','http-get',{url:web.origin+'/sample'});
     assert.equal(result.value,flag);
     assert.equal(result.execution_status,'SUCCESS');
-    assert.equal(result.tool_version,'8.14.1');
+    assert.equal(result.tool_version,listTools().find(tool => tool.tool_id === 'curl-local').version);
     assert.equal(await core.finish(task,'get',flag,flag),'LOCALLY_VERIFIED');
     assert.deepEqual(web.requests,['/sample']);
     const redirect=core.createTask({challenge_type:'web',authorized_scope:web.origin,requested_tools:['curl-local']});
