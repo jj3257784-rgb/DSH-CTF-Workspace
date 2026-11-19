@@ -13,7 +13,7 @@ jobs:
       - name: Verify published local console
         run: |
           docker compose up --detach
-          curl --fail --silent --show-error --retry 15 --retry-connrefused http://127.0.0.1:8080/ --output /dev/null
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 --retry-max-time 30 --max-time 5 http://127.0.0.1:8080/ --output /dev/null
           docker compose exec -T workbench node --input-type=module -e "import {listTools} from './src/executor/tool-registry.js'; const tools=listTools().filter(t=>t.execution_enabled); console.log(tools.map(t=>t.tool_id)); if(tools.length!==8)process.exit(1)"
       - if: always()
         run: docker compose down --volumes
