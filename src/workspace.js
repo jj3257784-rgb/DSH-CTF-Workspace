@@ -98,13 +98,21 @@ export function composeWorkspace(createExecutor, root, fixtureRoot) {
     }
   }
 
-  function interrupt() {
+  function interruptTasks(reason) {
+    const failures = [];
     for (const task of tasks.values()) {
       if (['PREFLIGHT_PASSED', 'RUNNING', 'PAUSED'].includes(task.state.status)) {
-        task.state.transition('INTERRUPTED', 'PROCESS_EXIT');
+        try {
+          task.state.transition('INTERRUPTED', reason);
+        } catch (error) {
+          failures.push(error);
+        }
       }
     }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, 'Could not persist interrupted tasks');
   }
+  const interrupt = () => interruptTasks('PROCESS_EXIT');
 
   const api = {
     createTask(input) {
@@ -307,7 +315,7 @@ export function composeWorkspace(createExecutor, root, fixtureRoot) {
 
     close() {
       if ([...tasks.values()].some(task => task.active || task.pausing)) throw new Error('Task operation in flight');
-      if (!closed) interrupt();
+      if (!closed) interruptTasks('WORKSPACE_CLOSED');
       closed = true;
       process.removeListener('exit', interrupt);
       tasks.clear();

@@ -1,9 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { get } from 'node:http';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startConsole } from '../../src/console/server.js';
+import { historicalStatus } from '../../src/state/evidence-store.js';
+
+test('Console can retry shutdown after a transient journal failure', async t => {
+  const dataRoot = mkdtempSync('data/console-');
+  t.after(() => rmSync(dataRoot, { recursive: true }));
+  const app = await startConsole({ dataRoot });
+  const response = await fetch(app.url + '/api/tasks', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer ' + new URL(app.launchUrl).hash.slice(1),
+      'content-type': 'application/json', 'x-workbench-request': '1'
+    },
+    body: JSON.stringify({ title: 'Shutdown retry', challenge_type: 'misc', authorized_scope: 'local-only' })
+  });
+  assert.equal(response.status, 201);
+  const { task_id: id } = await response.json();
+  const journal = join(dataRoot, id, 'evidence.jsonl');
+  const backup = journal + '.backup';
+  renameSync(journal, backup);
+  try {
+    const first = app.close();
+    assert.equal(app.close(), first);
+    await assert.rejects(first, { code: 'ENOENT' });
+  } finally {
+    renameSync(backup, journal);
+  }
+  await app.close();
+  await app.close();
+  assert.equal(historicalStatus(dataRoot, id), 'INTERRUPTED');
+});
 
 test('Console loopback routes manage execution, evidence, attachments and history', async t => {
   const dataRoot = mkdtempSync('data/console-');
@@ -24,6 +54,13 @@ test('Console loopback routes manage execution, evidence, attachments and histor
   assert.match(await page.text(),/CTF Workbench/);
   assert.match(page.headers.get('content-security-policy'),/default-src 'self'/);
   const input={title:'Local fixture',challenge_type:'misc',authorized_scope:'local-only'};
+  const invalidTitle = Buffer.concat([Buffer.from('{"title":"'), Buffer.from([0xff]),
+    Buffer.from('","challenge_type":"misc","authorized_scope":"local-only"}')]);
+  const malformed = await fetch(app.url + '/api/tasks', { method:'POST',
+    headers:{ authorization:'Bearer ' + new URL(app.launchUrl).hash.slice(1),
+      'content-type':'application/json', 'x-workbench-request':'1' }, body:invalidTitle });
+  assert.equal(malformed.status,400);
+  assert.deepEqual((await request('/api/tasks')).data,[]);
   assert.equal((await fetch(app.url+'/api/tasks')).status,401);
   for (const authorization of ['', 'Bearer wrong']) {
     assert.equal((await request('/api/tasks',input,{authorization})).status,401);
@@ -43,6 +80,16 @@ test('Console loopback routes manage execution, evidence, attachments and histor
   assert.equal(created.status,201);
   const id=created.data.task_id;
   const path='/api/tasks/'+id;
+  const headers = { authorization:'Bearer ' + new URL(app.launchUrl).hash.slice(1) };
+  for (const [route, method, allow] of [
+    ['/app.js','PUT','GET'], ['/api/tools','PUT','GET'], ['/api/tasks','PUT','GET, POST'],
+    [path,'PUT','GET'], [path+'/report','PUT','GET'], [path+'/pause','GET','POST']
+  ]) {
+    const response = await fetch(app.url + route, {method, headers});
+    assert.equal(response.status,405,route);
+    assert.equal(response.headers.get('allow'),allow,route);
+    await response.json();
+  }
   const other=(await request('/api/tasks',{...input,title:'Other task'})).data.task_id;
   assert.equal((await request('/api/tasks?category=misc&status=PREFLIGHT_PASSED')).data.length,2);
   assert.equal((await request(path)).data.title,'Local fixture');
@@ -85,4 +132,52 @@ test('Console loopback routes manage execution, evidence, attachments and histor
   assert.equal(history.status,'INTERRUPTED');
   assert.equal(history.live,false);
   assert.equal((await request(path+'/execute',operation)).status,409);
+});
+
+test('Console accepts a JSON content type with an explicit UTF-8 charset', async t => {
+  const dataRoot = mkdtempSync('data/console-');
+  const app = await startConsole({ dataRoot });
+  t.after(async () => { await app.close(); rmSync(dataRoot, { recursive: true }); });
+  const response = await fetch(app.url + '/api/tasks', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer ' + new URL(app.launchUrl).hash.slice(1),
+      'x-workbench-request': '1',
+      'content-type': 'application/json; charset=UTF-8'
+    },
+    body: JSON.stringify({ title: '编码检查', challenge_type: 'misc', authorized_scope: 'local-only' })
+  });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).preflight_status, 'PASSED');
+});
+
+test('Console reports damaged history consistently without echoing journal contents', async t => {
+  const dataRoot = mkdtempSync('data/console-');
+  const id = 'ctf-00000000-0000-4000-8000-000000000000';
+  mkdirSync(join(dataRoot, id));
+  const journal = join(dataRoot, id, 'evidence.jsonl');
+  const app = await startConsole({ dataRoot });
+  t.after(async () => { await app.close(); rmSync(dataRoot, { recursive: true }); });
+  const headers = { authorization: 'Bearer ' + new URL(app.launchUrl).hash.slice(1) };
+  for (const damage of ['malformed JSON', 'invalid chain', 'directory', 'missing']) {
+    await t.test(damage, async () => {
+      if (damage === 'malformed JSON') writeFileSync(journal, 'private malformed record\n');
+      if (damage === 'invalid chain') writeFileSync(journal, '{}\n');
+      if (damage === 'directory') mkdirSync(journal);
+      try {
+        const list = await (await fetch(app.url + '/api/tasks', { headers })).json();
+        assert.equal(list[0].status, 'RECOVERY_REQUIRED');
+        assert.equal(list[0].error_category, 'INVALID_EVIDENCE');
+        for (const suffix of ['', '/report']) {
+          const response = await fetch(app.url + '/api/tasks/' + id + suffix, { headers });
+          assert.equal(response.status, 409);
+          assert.deepEqual(await response.json(), { error: '任务证据损坏，需要人工恢复', error_category: 'INVALID_EVIDENCE' });
+        }
+      } finally {
+        if (damage !== 'missing') rmSync(journal, { recursive: damage === 'directory' });
+      }
+    });
+  }
+  const unknown = await fetch(app.url + '/api/tasks/ctf-00000000-0000-4000-8000-000000000001', { headers });
+  assert.equal(unknown.status, 404);
 });

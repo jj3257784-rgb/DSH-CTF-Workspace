@@ -14,9 +14,10 @@ aside{border-right:1px solid var(--line);padding-right:18px}
 .filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
 ul,ol{padding-left:20px;margin:8px 0} #tasks,#evidence{list-style:none;padding:0}
 #tasks li{border-bottom:1px solid var(--line)}
-#tasks button{width:100%;display:grid;text-align:left;gap:3px;border:0;background:transparent;padding:10px 7px}
+#tasks button{width:100%;display:grid;text-align:left;gap:3px;border:0;background:transparent;padding:10px 7px;white-space:normal;overflow-wrap:anywhere}
 #tasks button[aria-current=true]{background:#21322e;border-left:3px solid var(--accent)}
 .task-heading{display:flex;justify-content:space-between;gap:12px;align-items:start}
+#task-title{overflow-wrap:anywhere}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:5px 15px;margin:12px 0;color:var(--muted)}
 dd{margin:0;overflow-wrap:anywhere} .controls{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
 details{border-top:1px solid var(--line);padding:8px 0} summary{cursor:pointer;font-weight:600}

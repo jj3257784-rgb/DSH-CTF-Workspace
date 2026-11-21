@@ -18,17 +18,60 @@ const desktopDeadlineSeconds = 90;
 const miscSampleExpectedFlag = 'flag{phase1b_misc}';
 
 export function apply(ctx, config) {
-  registerDesktopTool(ctx, config, project);
+  const root = realpathSync(project);
+  const { workspaceId } = config ?? {};
+  const tool = desktopTool(ctx, config, root);
+  const registrations = new Map();
+  const unregister = agent => {
+    const dispose = registrations.get(agent);
+    registrations.delete(agent);
+    dispose?.();
+  };
+  const reconcile = (workspace, archived) => {
+    const members = new Set(typeof workspace?.path === 'string' && relative(root, workspace.path) === ''
+      ? workspace.sessionIds : []);
+    const eligible = new Set(ctx.agents.list().filter(agent => {
+      const session = agent.session;
+      return session?.id === agent.id && session.header?.id === agent.id
+        && session.header.parentSession === undefined
+        && members.has(agent.id) && !archived.includes(agent.id);
+    }));
+    for (const agent of registrations.keys()) {
+      if (!eligible.has(agent)) unregister(agent);
+    }
+    for (const agent of eligible) {
+      if (!registrations.has(agent)) registrations.set(agent, agent.ctx.tools.register(tool));
+    }
+  };
+  const refresh = () => reconcile(ctx.workspaceRegistry.get(workspaceId), ctx.workspaceRegistry.archivedSessionIds);
+  ctx.on('agent/created', refresh);
+  ctx.on('agent/disposed', ({ agent }) => unregister(agent));
+  ctx.on('domain/changed', change => {
+    if (change.domain !== 'workspace') return;
+    if (change.table === 'workspaces' && change.key === workspaceId) {
+      // The storage notification precedes the Workspace object's snapshot update.
+      reconcile(change.operation === 'put' ? change.value : undefined, ctx.workspaceRegistry.archivedSessionIds);
+    } else if (change.table === '' && change.operation === 'put') {
+      reconcile(ctx.workspaceRegistry.get(workspaceId), change.value.archivedSessionIds);
+    }
+  });
+  ctx.effect(() => () => {
+    for (const agent of registrations.keys()) unregister(agent);
+  }, 'ctf-workspace scoped tool cleanup');
+  refresh();
 }
 
 export function registerDesktopTool(ctx, config, workspacePath) {
+  ctx.tools.register(desktopTool(ctx, config, realpathSync(workspacePath)));
+}
+
+function desktopTool(ctx, config, root) {
   const workspaceId = config?.workspaceId;
   if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
     throw new Error('CTF requires a trusted Workspace registration ID');
   }
-  const root = realpathSync(workspacePath);
   const handlers = new Map();
-  ctx.tools.register({
+  return {
     ...desktopContract,
     async execute(args, exec) {
       const agent = authorizeWorkspace(ctx, workspaceId, root, exec);
@@ -62,14 +105,14 @@ export function registerDesktopTool(ctx, config, workspacePath) {
           handlers.set(sessionId, { agent, handler });
           return value;
         } catch (error) {
-          handler?.dispose?.();
+          await handler?.dispose?.();
           releaseSession(root, workspaceId, sessionId);
           throw error;
         }
       }
       return handler(args, exec);
     }
-  });
+  };
 }
 
 function grantDirectory(root, workspaceId, sessionId) {
@@ -121,7 +164,7 @@ function assertKnowledgeArgs({ query, tags }) {
     throw new Error('Invalid knowledge query');
   }
   if (tags !== undefined && (!Array.isArray(tags) || tags.length > 16
-    || tags.some(tag => typeof tag !== 'string' || !tag.trim() || tag.length > 64))) {
+    || Array.from(tags).some(tag => typeof tag !== 'string' || !tag.trim() || tag.length > 64))) {
     throw new Error('Invalid knowledge tags');
   }
 }
@@ -190,7 +233,7 @@ function createSessionHandler(ctx, config, workspacePath) {
 
   function queryKey(args) {
     const tags = Array.isArray(args.tags) ? [...new Set(args.tags)].sort() : args.tags ?? [];
-    return JSON.stringify([args.query.trim().toLowerCase(), tags]);
+    return JSON.stringify([args.query.trim().replace(/\s+/g, ' ').toLowerCase(), tags]);
   }
 
   function newKnowledge(found) {
@@ -205,8 +248,10 @@ function createSessionHandler(ctx, config, workspacePath) {
     return { ...found, results };
   }
 
-  ctx.on('dispose', () => core.close());
-  const handler = async (args, exec) => {
+  const pending = new Set();
+  let disposed = false;
+  let disposal;
+  const execute = async (args, exec) => {
       const session = exec?.agent?.session;
       if (session?.id !== sessionId || typeof exec.callId !== 'string' || !exec.callId
         || typeof session.header?.cwd !== 'string' || (!binding && realpathSync(session.header.cwd) !== root)) {
@@ -233,7 +278,7 @@ function createSessionHandler(ctx, config, workspacePath) {
         if (decision.preflight_status !== 'PASSED') throw new Error(decision.rejection_reason);
         permit = decision;
         const evidence = core.recordHostProposal(permit, { ...correlation, task_id: permit.task_id });
-        if (typeof args.query === 'string') queries.add(queryKey(args));
+        if (args.query?.trim()) queries.add(queryKey(args));
         const tryCategoryReference = ['misc', 'reverse', 'crypto'].includes(args.category)
           && args.query?.trim() && permit.knowledge?.result_status === 'NO_RESULT';
         const knowledge = tryCategoryReference
@@ -316,9 +361,21 @@ function createSessionHandler(ctx, config, workspacePath) {
           throw new Error('Unknown CTF action');
       }
   };
-  handler.dispose = () => {
-    try { core.close(); } catch { /* already closed or an operation is in flight */ }
+  const handler = (args, exec) => {
+    if (disposed) return Promise.reject(new Error('CTF session handler disposed'));
+    const work = execute(args, exec);
+    pending.add(work);
+    work.then(() => pending.delete(work), () => pending.delete(work));
+    return work;
   };
+  handler.dispose = () => {
+    if (disposed) return disposal;
+    disposed = true;
+    if (!pending.size) return core.close();
+    disposal = Promise.allSettled([...pending]).then(() => core.close());
+    return disposal;
+  };
+  ctx.on('dispose', () => handler.dispose());
   return handler;
 }
 
@@ -332,7 +389,7 @@ const toolContract = {
         category: { type: 'string', enum: categories }, title: string, query: string,
         attachment_path: { type: 'string', description: 'For Pwn or Reverse start, pass the known workspace-relative path of the user-provided binary to automatically inspect its header. Extension is optional.' },
         tags: { type: 'array', items: string }, task_id: string, operation_id: string, tool_id: string,
-        operation: string, arguments: { type: 'object' }, candidate: string,
+        operation: string, arguments: { type: 'object', description: 'For strings-local, file must be a filename directly under fixtures/misc ending in .bin, .elf, .zip or .b64. A workspace attachment_path accepted by start is not an executor file grant. An .exe file is unsupported by strings-local.' }, candidate: string,
         include_method_card: { type: 'boolean', description: 'Set false on execute to return static observations without an automatic reference card.' }
       }
     },
@@ -359,7 +416,7 @@ const desktopContract = {
         type: 'object', required: ['category'], additionalProperties: false,
         properties: {
           category: { type: 'string', enum: ['web', 'crypto'] },
-          source: { type: 'string', maxLength: 16384 }, httpRecord: { type: 'string', maxLength: 16384 },
+          source: string, httpRecord: string,
           algorithm: string, ciphertext: string, key: { type: 'integer' }
         }
       }

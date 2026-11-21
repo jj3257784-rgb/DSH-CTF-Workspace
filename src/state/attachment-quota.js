@@ -16,17 +16,33 @@ export function storeUpload(root, task, bytes, register) {
     for (const dir of readdirSync(root, { withFileTypes: true })) {
       if (!dir.isDirectory() || !/^ctf-[a-f0-9-]{36}$/.test(dir.name)) continue;
       const folder = join(root, dir.name);
-      const files = readdirSync(folder, {withFileTypes:true});
+      let files;
+      try {
+        files = readdirSync(folder, { withFileTypes: true });
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
       for (const file of files) {
-        if (file.isFile() && file.name.endsWith('.upload.bin')) used += lstatSync(join(folder, file.name)).size;
+        if (!file.isFile() || !file.name.endsWith('.upload.bin')) continue;
+        const stat = lstatSync(join(folder, file.name), { throwIfNoEntry: false });
+        if (stat?.isFile()) used += stat.size;
       }
       if (files.some(file => file.isFile() && /^[a-f0-9-]{36}\.bin$/.test(file.name))) {
         if (!files.some(file => file.isFile() && file.name === 'evidence.jsonl')) {
           throw new Error('无法核对历史附件用量');
         }
-        for (const row of readEvidence(root, dir.name)) {
-          if (row.type !== 'attachment_registered' || !/^[a-f0-9-]{36}\.bin$/.test(row.artifact_path)) continue;
-          const stat = lstatSync(join(folder, row.artifact_path), {throwIfNoEntry:false});
+        const evidence = readEvidence(root, dir.name);
+        if (!evidence.length) {
+          if (!lstatSync(folder, { throwIfNoEntry: false })) continue;
+          throw new Error('无法核对历史附件用量');
+        }
+        const registered = new Set(evidence
+          .filter(row => row.type === 'attachment_registered')
+          .map(row => row.artifact_path));
+        for (const file of files) {
+          if (!file.isFile() || !/^[a-f0-9-]{36}\.bin$/.test(file.name) || !registered.has(file.name)) continue;
+          const stat = lstatSync(join(folder, file.name), {throwIfNoEntry:false});
           if (stat?.isFile()) used += stat.size;
         }
       }
@@ -36,7 +52,14 @@ export function storeUpload(root, task, bytes, register) {
     try {
       return register(path);
     } catch (error) {
-      unlinkSync(join(root, task.decision.task_id, path));
+      try {
+        unlinkSync(join(root, task.decision.task_id, path));
+      } catch (cleanupError) {
+        if (cleanupError.code !== 'ENOENT') {
+          throw Object.assign(new AggregateError([error, cleanupError], 'Attachment registration and cleanup failed'),
+            { artifact_path: path });
+        }
+      }
       throw error;
     }
   } finally {

@@ -11,7 +11,13 @@ function inspect(root, id, liveStatus) {
   if (!lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()
     || !lstatSync(join(dir, 'evidence.jsonl'), { throwIfNoEntry: false })?.isFile()) return null;
 
-  const evidence = readEvidence(root, id);
+  let evidence;
+  try {
+    evidence = readEvidence(root, id);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
   const operations = new Map();
   const candidates = new Map();
   let preflight;
@@ -42,8 +48,10 @@ function inspect(root, id, liveStatus) {
     }
   }
   const recordedStatus = state?.result_status ?? null;
-  const status = liveStatus ?? (terminal.has(recordedStatus) ? recordedStatus : 'RECOVERY_REQUIRED');
   const unresolved = [...operations.values()].filter(operation => !operation.result_evidence_id);
+  const inconsistentCompletion = recordedStatus === 'COMPLETED' && unresolved.length > 0;
+  const status = liveStatus ?? (terminal.has(recordedStatus) && !inconsistentCompletion
+    ? recordedStatus : 'RECOVERY_REQUIRED');
   return {
     task_id: id,
     title: preflight?.title ?? null,
@@ -80,12 +88,21 @@ export function inspectLiveTask(root, id, status) {
 }
 
 export function listTasks(root, statusFor = () => undefined, cache) {
-  if (!lstatSync(root, { throwIfNoEntry: false })) return [];
-  return readdirSync(root, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && taskIdPattern.test(entry.name))
-    .map(entry => {
+  if (!lstatSync(root, { throwIfNoEntry: false })) {
+    cache?.clear();
+    return [];
+  }
+  const entries = readdirSync(root, { withFileTypes: true });
+  const ids = new Set(entries.filter(entry => entry.isDirectory() && taskIdPattern.test(entry.name))
+    .map(entry => entry.name));
+  if (cache) {
+    for (const id of cache.keys()) {
+      if (!ids.has(id)) cache.delete(id);
+    }
+  }
+  return [...ids]
+    .map(id => {
       try {
-        const id = entry.name;
         const status = statusFor(id);
         const stat = cache && status == null && lstatSync(join(root, id, 'evidence.jsonl'), {
           bigint: true, throwIfNoEntry: false
@@ -93,23 +110,24 @@ export function listTasks(root, statusFor = () => undefined, cache) {
         const version = stat?.isFile?.() && [stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join('/');
         const cached = version && cache.get(id);
         if (cached && cached.version === version) return structuredClone(cached.summary);
+        cache?.delete(id);
         const detail = inspect(root, id, status);
-        if (!detail) return null;
+        if (!detail) throw new Error('Invalid task evidence chain');
         const { evidence, operations, candidates, ...summary } = detail;
         if (version) cache.set(id, { version, summary: structuredClone(summary) });
         return summary;
       } catch (error) {
         if (!(error instanceof SyntaxError) && error.message !== 'Invalid task evidence chain') throw error;
         return {
-          task_id: entry.name, status: 'RECOVERY_REQUIRED', recorded_status: null,
+          task_id: id, status: 'RECOVERY_REQUIRED', recorded_status: null,
           created_at: null, updated_at: null, error_category: 'INVALID_EVIDENCE',
           flag_status: 'NOT_FOUND',
           recovery: { required: true, auto_replay: false, unresolved_operations: [] }
         };
       }
     })
-    .filter(Boolean)
-    .sort((left, right) => (right.created_at ?? '').localeCompare(left.created_at ?? '')
+    .sort((left, right) => (right.created_at ? Date.parse(right.created_at) : -Infinity)
+      - (left.created_at ? Date.parse(left.created_at) : -Infinity)
       || left.task_id.localeCompare(right.task_id));
 }
 

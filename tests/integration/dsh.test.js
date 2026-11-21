@@ -1,10 +1,117 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readEvidence } from '../../src/index.js';
-import { registerWorkspaceTool } from '../../src/dsh/plugin.js';
+import { apply, registerWorkspaceTool } from '../../src/dsh/plugin.js';
+
+test('Desktop plugin advertises tools only to active workspace members', () => {
+  const events = new Map();
+  const project = new URL('../../', import.meta.url);
+  const root = realpathSync(project);
+  const workspace = { id: 'trusted', path: root, sessionIds: ['existing'] };
+  const registry = { get: () => workspace, archivedSessionIds: [] };
+  const makeAgent = (id, parentSession) => {
+    const tools = new Map();
+    return {
+      id, session: { id, header: { id, cwd: root, parentSession } }, tools,
+      ctx: { tools: { register(tool) {
+        assert.equal(tools.has(tool.name), false);
+        tools.set(tool.name, tool);
+        return () => tools.delete(tool.name);
+      } } }
+    };
+  };
+  const existing = makeAgent('existing');
+  const fresh = makeAgent('fresh');
+  const ordinary = makeAgent('ordinary');
+  const child = makeAgent('child', existing.id);
+  const agents = new Map([existing, ordinary, child].map(agent => [agent.id, agent]));
+  const ctx = {
+    agents: { get: id => agents.get(id), list: () => [...agents.values()] },
+    workspaceRegistry: registry,
+    tools: { register() { assert.fail('Desktop tool must never be registered globally'); } },
+    on(event, handler) { events.set(event, handler); },
+    effect(register) { events.set('dispose', register()); }
+  };
+  const visible = agent => agent.tools.has('ctf_workspace');
+  const changed = fields => events.get('domain/changed')({ domain: 'workspace', operation: 'put', ...fields });
+  apply(ctx, { workspaceId: workspace.id });
+  assert.equal(visible(existing), true);
+  assert.equal(visible(ordinary), false);
+  agents.set(fresh.id, fresh);
+  events.get('agent/created')({ agent: fresh });
+  assert.equal(visible(fresh), false);
+  changed({ table: 'workspaces', key: workspace.id, value: { ...workspace, sessionIds: ['fresh', 'child'] } });
+  assert.equal(visible(existing), false);
+  assert.equal(visible(fresh), true);
+  assert.equal(visible(child), false);
+  workspace.sessionIds = ['fresh', 'child'];
+  changed({ table: '', value: { archivedSessionIds: ['fresh'] } });
+  assert.equal(visible(fresh), false);
+  changed({ table: '', value: { archivedSessionIds: [] } });
+  assert.equal(visible(fresh), true);
+  events.get('agent/disposed')({ agent: fresh });
+  assert.equal(visible(fresh), false);
+  changed({ table: 'workspaces', key: workspace.id, value: { ...workspace, sessionIds: ['existing'] } });
+  assert.equal(visible(existing), true);
+  events.get('dispose')();
+  assert.equal(visible(existing), false);
+});
+
+for (const failed of [false, true]) {
+test('Plugin disposal drains an active execution and pause before closing evidence: ' + (failed ? 'failure' : 'success'), async t => {
+  const { listen, closeAndProbe } = await import('../../fixtures/web/server.js');
+  const root = mkdtempSync('data/dispose-');
+  let tool, dispose, respond, arrived;
+  const received = new Promise(resolve => { arrived = resolve; });
+  const server = await listen((_req, res) => { respond = res; arrived(); });
+  t.after(async () => {
+    await dispose?.();
+    await closeAndProbe(server);
+    rmSync(root, { recursive: true });
+  });
+  registerWorkspaceTool({ tools: { register(value) { tool = value; } }, on(_, fn) { dispose = fn; } },
+    { sessionId: 'dispose', authorizedScope: 'http://127.0.0.1:' + server.address().port }, root);
+  let sequence = 0;
+  const call = args => tool.execute(args, { callId: String(++sequence),
+    agent: { session: { id: 'dispose', header: { cwd: root } } } });
+  const task = await call({ action: 'start', category: 'web', title: 'Disposal boundary' });
+  const work = call({ action: 'execute', tool_id: 'web-local', operation: 'http-get',
+    arguments: { url: 'http://127.0.0.1:' + server.address().port + '/sample' } });
+  await received;
+  const pause = call({ action: 'pause' }).then(value => value.status, error => error.message);
+  const disposal = Promise.resolve().then(dispose).then(() => null, error => error);
+  if (failed) respond.writeHead(503);
+  respond.end('flag{disposal}');
+  assert.equal((await work).execution_status, failed ? 'FAILED' : 'SUCCESS');
+  assert.equal(await pause, failed ? 'HTTP_STATUS' : 'PAUSED');
+  assert.equal(await disposal, null);
+  const evidence = readEvidence(join(root, 'data'), task.task_id);
+  assert.equal(evidence.at(-1).result_status, failed ? 'FAILED' : 'INTERRUPTED');
+  assert.ok(evidence.some(row => row.type === 'tool_result' && row.result_status === (failed ? 'FAILED' : 'SUCCESS')));
+  await assert.rejects(call({ action: 'evidence' }), /disposed|closed|permit/i);
+});
+}
+
+test('Blank initial query leaves four distinct follow-up searches available', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'ctf-query-budget-'));
+  let tool, dispose;
+  t.after(() => { dispose?.(); rmSync(root, { recursive: true }); });
+  registerWorkspaceTool({ tools: { register(value) { tool = value; } }, on(_, fn) { dispose = fn; } },
+    { sessionId: 'budget', authorizedScope: 'local-only' }, root);
+  let calls = 0;
+  const call = args => tool.execute(args, { callId: String(++calls),
+    agent: { session: { id: 'budget', header: { cwd: root } } } });
+  await call({ action: 'start', category: 'misc', title: 'Fixture', query: '　' });
+  assert.ok((await call({ action: 'retrieve', query: 'alpha beta' })).knowledge);
+  assert.equal((await call({ action: 'retrieve', query: ' ALPHA  BETA ' })).status, 'SKIPPED');
+  for (const query of ['two', 'three', 'four']) {
+    assert.ok((await call({ action: 'retrieve', query })).knowledge);
+  }
+  assert.equal((await call({ action: 'retrieve', query: 'five' })).status, 'SKIPPED');
+});
 
 test('native tool contract stub returns real Misc evidence to the originating session', async t => {
   const root = mkdtempSync(join(tmpdir(), 'ctf-dsh-'));
@@ -301,6 +408,12 @@ test('global Desktop tool gates every action on registered live workspace member
   } };
   await assert.rejects(call(ordinary, offline), denied);
   assert.equal((await call(second, offline)).knowledge.results[0].document_id, 'web-method-card');
+  for (const field of ['source', 'httpRecord']) {
+    assert.deepEqual(tool.parameters.properties.material.properties[field], { type: 'string' });
+    await assert.rejects(call(second, { ...offline, material: {
+      ...offline.material, [field]: ' '.repeat(16385)
+    } }), /Invalid offline material/);
+  }
   const crypto = await call(second, { action: 'offline-method-card', material: {
     category: 'crypto', algorithm: 'XOR', ciphertext: '4c46', key: 42
   } });
@@ -363,8 +476,14 @@ test('global Desktop tool gates every action on registered live workspace member
   await assert.rejects(call(ctf, { action: 'verify', operation_id: result.operation_id,
     candidate: result.value }), /grant expired/);
   t.mock.restoreAll();
-  unlinkSync(join(root, 'data', task.task_id, 'evidence.jsonl'));
-  await assert.rejects(call(ctf, execute), /ENOENT/);
+  const journal = join(root, 'data', task.task_id, 'evidence.jsonl');
+  const savedJournal = readFileSync(journal);
+  unlinkSync(journal);
+  try {
+    await assert.rejects(call(ctf, execute), /ENOENT/);
+  } finally {
+    writeFileSync(journal, savedJournal, { flag: 'wx' });
+  }
   workspace.sessionIds = ['second'];
   await assert.rejects(call(ctf, execute), denied);
 });
@@ -406,6 +525,8 @@ test('Desktop start validates arguments before reserving the session grant', asy
   await assert.rejects(call({ action: 'start', category: 'misc', title: 'Invalid query', query: 42 }),
     /Invalid knowledge query/);
   await assert.rejects(call({ action: 'start', category: 'misc', title: 'Invalid tags', tags: [42] }),
+    /Invalid knowledge tags/);
+  await assert.rejects(call({ action: 'start', category: 'misc', title: 'Missing tag element', tags: Array(1) }),
     /Invalid knowledge tags/);
   // Rejected arguments must not consume the one-shot grant for this session.
   assert.equal(existsSync(join(root, 'data', 'desktop-session-grants')), false);

@@ -24,8 +24,9 @@ export function preflight(root, input = {}) {
   const { challenge_type: type, authorized_scope: scope, budget_limit: budget = {
     max_tool_calls: 20, max_runtime_seconds: 300
   } } = input ?? {};
+  const validType = typeof type === 'string' && Object.hasOwn(capabilities, type);
   let reason = null;
-  if (!Object.hasOwn(capabilities, type)) reason = 'INVALID_TYPE';
+  if (!validType) reason = 'INVALID_TYPE';
   else if (!checkScope(type, scope)) reason = 'INVALID_SCOPE';
   else if (!Number.isInteger(budget?.max_tool_calls) || budget.max_tool_calls < 1 || budget.max_tool_calls > 20
     || !Number.isInteger(budget.max_runtime_seconds) || budget.max_runtime_seconds < 1
@@ -60,12 +61,12 @@ export function preflight(root, input = {}) {
     };
   }
   const knowledge = !reason || input?.knowledge_query !== undefined
-    ? retrieveForTask(store, Object.hasOwn(capabilities, type) ? type : null, input?.knowledge_query, skill, reason)
+    ? retrieveForTask(store, validType ? type : null, input?.knowledge_query, skill, reason)
     : null;
   const decision = Object.freeze({
     ...(knowledge ? { knowledge } : {}),
     ...skill,
-    task_id: id, challenge_type: Object.hasOwn(capabilities, type) ? type : null,
+    task_id: id, challenge_type: validType ? type : null,
     authorized_scope: reason ? null : scope,
     selected_method_card: selection.card?.id ?? null,
     tool_allowlist: Object.freeze(reason ? [] : selection.tools),
@@ -75,7 +76,8 @@ export function preflight(root, input = {}) {
     preflight_status: reason ? 'REJECTED' : 'PASSED'
   });
   audit(store, 'preflight', decision.preflight_status, {
-    title: typeof input?.title === 'string' ? input.title.trim().slice(0, 120) : null,
+    title: typeof input?.title === 'string'
+      ? input.title.trim().toWellFormed().slice(0, 120).replace(/[\uD800-\uDBFF]$/, '') : null,
     error_category: reason, challenge_type: decision.challenge_type,
     authorized_scope: decision.authorized_scope,
     tool_allowlist: decision.tool_allowlist,

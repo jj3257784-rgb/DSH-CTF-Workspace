@@ -18,6 +18,7 @@ let detail;
 let selectionVersion = 0;
 let loadingDetail = false;
 let tools = [];
+let toolsLoaded = false;
 let refreshing = false;
 let renderedTaskList;
 let renderedStats;
@@ -31,7 +32,7 @@ function node(tag, text, className) {
 
 function badge(status) {
   const kind = /REJECTED|FAILED|TIMEOUT/.test(status) ? 'bad'
-    : /SUCCESS|PASSED|COMPLETED|VERIFIED|LOADED|RETRIEVED|VALID/.test(status) && status !== 'UNVERIFIED'
+    : /^(SUCCESS|PASSED|PREFLIGHT_PASSED|COMPLETED|VERIFIED|LOCALLY_VERIFIED|LOADED|RETRIEVED|VALID|FORMAT_VALID)$/.test(status)
       ? 'ok' : 'wait';
   return node('span', status, 'tag ' + kind);
 }
@@ -43,7 +44,11 @@ async function api(path, payload) {
     body:JSON.stringify(payload)
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error + (data.evidence_id ? ' · ' + data.evidence_id : ''));
+  if (!response.ok) {
+    const error = new Error(data.error + (data.evidence_id ? ' · ' + data.evidence_id : ''));
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -58,6 +63,7 @@ el('report').addEventListener('click', async event => {
   event.preventDefault();
   const id = selected;
   if (!id) return;
+  const version = selectionVersion;
   try {
     const report = await api(taskUrl(id) + '/report');
     const url = URL.createObjectURL(new Blob([JSON.stringify(report)], {type:'application/json'}));
@@ -66,7 +72,9 @@ el('report').addEventListener('click', async event => {
     link.download = id + '.json';
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (error) { message(error.message, 'bad'); }
+  } catch (error) {
+    if (selectionVersion === version) message(error.message, 'error');
+  }
 });
 
 function formValues(form) { return Object.fromEntries(new FormData(form)); }
@@ -89,13 +97,29 @@ function populateToolArguments() {
   }
 }
 
+const pendingButtons = new Set();
+
+function updateTaskButtons(data) {
+  const runnable = data.live && ['PREFLIGHT_PASSED','RUNNING'].includes(data.status);
+  const setEnabled = (button, enabled) => {
+    button.disabled = !enabled || pendingButtons.has(button);
+  };
+  setEnabled(el('execute').querySelector('button'), runnable && el('tool').value);
+  el('verify').querySelectorAll('button').forEach(button => setEnabled(button, data.live && data.status === 'RUNNING'));
+  setEnabled(el('attach').querySelector('button'), data.live);
+  for (const button of document.querySelectorAll('[data-action]')) {
+    const action = button.dataset.action;
+    setEnabled(button, data.live && (action === 'pause' ? runnable
+      : action === 'resume' ? data.status === 'PAUSED' : action === 'close'));
+  }
+}
+
 function renderDetail(data) {
   detail = data;
   el('empty').hidden = true;
   el('task').hidden = false;
   el('task-id').textContent = data.task_id;
   el('task-title').textContent = data.title ?? '历史任务';
-  el('report').href = taskUrl() + '/report';
   const facts = el('facts');
   facts.replaceChildren();
   for (const [label, value] of [
@@ -114,15 +138,7 @@ function renderDetail(data) {
     tool.replaceChildren(...data.tool_allowlist.map(id => new Option(id,id)));
     populateToolArguments();
   }
-  const runnable = data.live && ['PREFLIGHT_PASSED','RUNNING'].includes(data.status);
-  el('execute').querySelector('button').disabled = !runnable || !tool.value;
-  el('verify').querySelectorAll('button').forEach(button => { button.disabled = !data.live || data.status !== 'RUNNING'; });
-  el('attach').querySelector('button').disabled = !data.live;
-  for (const button of document.querySelectorAll('[data-action]')) {
-    const action = button.dataset.action;
-    button.disabled = !data.live || !(action === 'pause' ? runnable
-      : action === 'resume' ? data.status === 'PAUSED' : active.has(data.status));
-  }
+  updateTaskButtons(data);
 
   el('candidates').replaceChildren(...data.candidates.map(record =>
     node('li', [record.operation_id, record.result_status, record.candidate_hash].join(' · '))));
@@ -131,6 +147,10 @@ function renderDetail(data) {
   el('files').replaceChildren(...data.files.map(file =>
     node('li', [file.kind, file.name, file.path, file.available ? file.size + ' B' : '不可读', file.sha256].join(' · '))));
   const timeline = el('evidence');
+  const focused = document.activeElement;
+  const focusedEvidence = focused?.localName === 'summary' && timeline.contains(focused)
+    ? focused.parentElement.dataset.id : undefined;
+  let nextEvidenceFocus;
   const open = new Set([...timeline.querySelectorAll('details[open]')].map(item => item.dataset.id));
   timeline.replaceChildren(...data.evidence.map(record => {
     const item = node('li');
@@ -138,6 +158,7 @@ function renderDetail(data) {
     expansion.dataset.id = record.evidence_id;
     expansion.open = open.has(record.evidence_id);
     const summary = node('summary');
+    if (record.evidence_id === focusedEvidence) nextEvidenceFocus = summary;
     summary.append(node('time', new Date(record.timestamp).toLocaleTimeString()),
       node('span', stage[record.type] ?? record.type), badge(record.result_status ?? 'UNVERIFIED'),
       node('span', record.operation_id ?? ''), node('span', record.evidence_id, 'muted'),
@@ -150,6 +171,7 @@ function renderDetail(data) {
     item.append(expansion);
     return item;
   }));
+  nextEvidenceFocus?.focus({ preventScroll: true });
 }
 
 async function refresh(refreshedDetailId) {
@@ -158,7 +180,17 @@ async function refresh(refreshedDetailId) {
   try {
     const id = selected;
     const version = selectionVersion;
-    const tasks = await api('/api/tasks');
+    if (!toolsLoaded) {
+      tools = await api('/api/tools');
+      updateCreateTools();
+      toolsLoaded = true;
+    }
+    let order;
+    let tasks;
+    do {
+      order = el('filter-order').value;
+      tasks = await api(order === 'oldest' ? '/api/tasks?order=oldest' : '/api/tasks');
+    } while (order !== el('filter-order').value);
     const stat = [['全部任务',tasks.length], ['进行中',tasks.filter(x=>active.has(x.status)).length],
       ['本地已验证',tasks.filter(x=>x.flag_status==='LOCALLY_VERIFIED').length]];
     const statsKey = stat.map(([, count]) => count).join(',');
@@ -171,31 +203,41 @@ async function refresh(refreshedDetailId) {
     const category = el('filter-category').value;
     const status = el('filter-status').value;
     const filtered = tasks.filter(task => (!category || task.challenge_type === category) && (!status || task.status === status));
-    if (el('filter-order').value === 'oldest') filtered.reverse();
     const taskList = JSON.stringify([selected, filtered.map(task =>
       [task.task_id, task.title, task.challenge_type, task.created_at, task.status])]);
     if (taskList !== renderedTaskList) {
+      const focusedId = document.activeElement?.dataset.taskId;
+      let nextFocus;
       el('tasks').replaceChildren(...filtered.map(task => {
         const item = node('li');
         const button = node('button');
+        button.dataset.taskId = task.task_id;
+        if (task.task_id === focusedId) nextFocus = button;
         button.setAttribute('aria-current', String(task.task_id === selected));
         button.append(node('strong', task.title ?? task.task_id), node('span',
-          [task.challenge_type, new Date(task.created_at).toLocaleString()].filter(Boolean).join(' · '),'muted'),badge(task.status));
+          [task.challenge_type, task.created_at && new Date(task.created_at).toLocaleString()].filter(Boolean).join(' · '),'muted'),badge(task.status));
         button.addEventListener('click', () => select(task.task_id));
         item.append(button); return item;
       }));
+      nextFocus?.focus({ preventScroll: true });
       renderedTaskList = taskList;
     }
     if (id && id !== refreshedDetailId && selectionVersion === version && !loadingDetail) {
-      const current = await api(taskUrl(id));
-      if (selectionVersion === version && JSON.stringify(current) !== JSON.stringify(detail)) {
+      const current = await api(taskUrl(id)).catch(error => {
+        if (selectionVersion === version) {
+          detail = undefined;
+          el('task').hidden = true;
+          message(error.message, 'error');
+        }
+      });
+      if (current && selectionVersion === version && JSON.stringify(current) !== JSON.stringify(detail)) {
         if (!detail) message('');
         renderDetail(current);
       }
     }
     el('connection').textContent = '本地已连接';
-  } catch {
-    el('connection').textContent = '本地连接或读取失败';
+  } catch (error) {
+    el('connection').textContent = error.status === 401 ? '请通过控制台启动链接访问' : '本地连接或读取失败';
   } finally {
     refreshing = false;
   }
@@ -209,6 +251,7 @@ async function select(id) {
   el('task').hidden = true;
   el('execute').reset();
   el('tool').replaceChildren();
+  el('arguments').replaceChildren();
   el('verify').reset();
   el('attach').reset();
   el('output').textContent = '';
@@ -216,27 +259,35 @@ async function select(id) {
   message('');
   try {
     const data = await api(taskUrl(id));
-    if (selectionVersion !== version) return;
+    if (selectionVersion !== version) return false;
     renderDetail(data);
     await refresh(id);
+    return selectionVersion === version;
   } catch (error) {
     if (selectionVersion === version) message(error.message,'error');
+    return false;
   } finally {
     if (selectionVersion === version) loadingDetail = false;
   }
 }
 
 async function submit(button, work, id = selected) {
+  if (pendingButtons.has(button)) return;
+  pendingButtons.add(button);
   button.disabled = true;
   message('等待本地响应…');
   try { await work(); }
   catch (error) { if (selected === id) message(error.message,'error'); }
-  finally { button.disabled = false; await refresh(); }
+  finally {
+    pendingButtons.delete(button);
+    if (button.form === el('create')) button.disabled = false;
+    else if (detail) updateTaskButtons(detail);
+    await refresh();
+  }
 }
 
 function updateCreateTools() {
   const category = el('category').value;
-  el('create').elements.authorized_scope.value = category === 'web' ? 'http://127.0.0.1:' : 'local-only';
   const fieldset = el('tool-options');
   fieldset.replaceChildren(node('legend','可选工具'));
   for (const tool of tools.filter(item => item.tool_id !== 'gdb' && item.supported_categories.includes(category))) {
@@ -255,7 +306,10 @@ categories.forEach(category => {
 });
 for (const status of [...active,...terminal]) el('filter-status').add(new Option(status,status));
 el('category').value = 'misc';
-el('category').addEventListener('change',updateCreateTools);
+el('category').addEventListener('change', event => {
+  el('create').elements.authorized_scope.value = event.currentTarget.value === 'web' ? 'http://127.0.0.1:' : 'local-only';
+  updateCreateTools();
+});
 el('tool').addEventListener('change',populateToolArguments);
 for (const id of ['filter-category','filter-status','filter-order']) el(id).addEventListener('change',refresh);
 el('create').addEventListener('submit', event => {
@@ -263,10 +317,11 @@ el('create').addEventListener('submit', event => {
   const form = event.currentTarget;
   const { title, challenge_type, authorized_scope, query } = formValues(form);
   const requested_tools = new FormData(form).getAll('requested_tools');
+  const version = selectionVersion;
   submit(event.submitter, async () => {
     const result = await api('/api/tasks',{title,challenge_type,authorized_scope,requested_tools,
       ...(query ? {knowledge_query:{query}} : {})});
-    await select(result.task_id);
+    if (selectionVersion !== version || !await select(result.task_id)) return;
     message(result.preflight_status === 'PASSED' ? '任务已创建，预检通过' : '预检拒绝 · ' + result.rejection_reason,
       result.preflight_status === 'PASSED' ? 'ok' : 'error');
   });
@@ -324,8 +379,6 @@ el('attach').addEventListener('submit', event => {
   }, id);
 });
 
-try { tools = await api('/api/tools'); updateCreateTools(); }
-catch (error) { message(error.message,'error'); }
 await refresh();
 function refreshWhenVisible() {
   if (!document.hidden) void refresh();

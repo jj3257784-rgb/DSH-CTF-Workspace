@@ -85,14 +85,36 @@ test('Skill routing reads only selected packages and isolates audit', t => {
   assert.equal(reads.length, before);
 });
 
+test('Skill loader rejects malformed UTF-8 before hashing the body', t => {
+  observeReads(t, (path, next) => {
+    const value = next();
+    if (!path.endsWith('/ctf-misc/SKILL.md')) return value;
+    const malformed = Buffer.concat([Buffer.from(value), Buffer.from([0xff])]);
+    return typeof value === 'string' ? malformed.toString('utf8') : malformed;
+  });
+  assert.throws(() => loadSkill('misc', ['misc-local']), /SKILL_INVALID_BODY/);
+});
+
+test('Skill loader rejects duplicate top-level names in the document header', t => {
+  let duplicate = 'name: unrelated';
+  observeReads(t, (path, next) => path.endsWith('/ctf-misc/SKILL.md')
+    ? Buffer.from('---\nname: ctf-misc\n' + duplicate + '\n---\nSample\n') : next());
+  for (const line of ['name: unrelated', 'name : unrelated', 'name: ctf-misc', '"name": unrelated', "'name': unrelated"]) {
+    duplicate = line;
+    assert.throws(() => loadSkill('misc', ['misc-local']), {
+      message: 'SKILL_INVALID_BODY', skillVersion: '1.0.0'
+    });
+  }
+});
+
 for (const [mode, code] of [['missing', 'SKILL_NOT_FOUND'], ['body', 'SKILL_INVALID_BODY'], ['metadata', 'SKILL_INVALID_METADATA']]) {
   test('Skill fail closed: ' + mode, async t => {
     const { root, core } = setup(t);
     observeReads(t, (path, next) => {
-      if (path.endsWith('/ctf-crypto/skill.json') && mode === 'metadata') return '{"id":"ctf-web"}';
+      if (path.endsWith('/ctf-crypto/skill.json') && mode === 'metadata') return Buffer.from('{"id":"ctf-web"}');
       if (path.endsWith('/ctf-crypto/SKILL.md')) {
         if (mode === 'missing') throw Object.assign(new Error('missing'), { code:'ENOENT' });
-        if (mode === 'body') return '';
+        if (mode === 'body') return Buffer.alloc(0);
       }
       return next();
     });

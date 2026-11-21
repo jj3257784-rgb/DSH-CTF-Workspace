@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isUtf8 } from 'node:buffer';
 
 const root = new URL('../../skills/', import.meta.url);
 const schema = JSON.parse(readFileSync(new URL('skill.schema.json', root), 'utf8'));
@@ -15,19 +16,22 @@ function matches(value, rule) {
     && (rule.const === undefined || rule.const === value);
 }
 
-function readAsset(path) {
+function readAsset(path, invalidEncoding) {
+  let bytes;
   try {
-    return readFileSync(path, 'utf8');
+    bytes = readFileSync(path);
   } catch (error) {
     throw new Error(error.code === 'ENOENT' ? 'SKILL_NOT_FOUND' : 'SKILL_READ_FAILED', { cause: error });
   }
+  if (!isUtf8(bytes)) throw new Error(invalidEncoding);
+  return bytes.toString('utf8');
 }
 
 export function loadSkill(type, tools) {
   if (!schema.properties.category.enum.includes(type)) throw new Error('SKILL_INVALID_METADATA');
   const id = 'ctf-' + type;
   const directory = new URL(id + '/', root);
-  const raw = readAsset(new URL('skill.json', directory));
+  const raw = readAsset(new URL('skill.json', directory), 'SKILL_INVALID_METADATA');
   let metadata;
   try {
     metadata = JSON.parse(raw);
@@ -42,13 +46,14 @@ export function loadSkill(type, tools) {
   }
   let body;
   try {
-    body = readAsset(new URL(metadata.entrypoint, directory));
+    body = readAsset(new URL(metadata.entrypoint, directory), 'SKILL_INVALID_BODY');
   } catch (error) {
     error.skillVersion = metadata.version;
     throw error;
   }
   const header = body.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
-  if (!header || !header[1].split(/\r?\n/).includes('name: ' + id) || !body.slice(header[0].length).trim()) {
+  const names = header?.[1].split(/\r?\n/).filter(line => /^(?:name|'name'|"name")[ \t]*:/.test(line));
+  if (names?.length !== 1 || names[0] !== 'name: ' + id || !body.slice(header[0].length).trim()) {
     throw Object.assign(new Error('SKILL_INVALID_BODY'), { skillVersion: metadata.version });
   }
   return { metadata, body };

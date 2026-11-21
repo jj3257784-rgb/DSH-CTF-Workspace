@@ -19,6 +19,10 @@ function reply(response, status, payload, headers = {}) {
   response.end(JSON.stringify(payload));
 }
 
+function methodNotAllowed(response, allow) {
+  return reply(response, 405, { error: '操作不受支持' }, { allow });
+}
+
 async function body(request) {
   const chunks = [];
   let size = 0;
@@ -29,7 +33,7 @@ async function body(request) {
   }
   if (size > bodyLimit) throw Object.assign(new Error('请求体超过限制'), { http: 413 });
   try {
-    const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const value = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks)));
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
     return value;
   } catch {
@@ -71,8 +75,10 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
   const permits = new Map();
   const token = randomBytes(32).toString('hex');
   let origin;
+  let serverClosed;
   let closing;
-  const server = createServer({ requestTimeout: 15000 }, async (request, response) => {
+  const pendingRequests = new Set();
+  async function handleRequest(request, response) {
     response.setHeader('cache-control', 'no-store');
     response.setHeader('x-content-type-options', 'nosniff');
     response.setHeader('content-security-policy', "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
@@ -80,7 +86,7 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
     const method = request.method;
     if (method === 'POST' && ((request.headers.origin && request.headers.origin !== origin)
       || request.headers['x-workbench-request'] !== '1'
-      || request.headers['content-type'] !== 'application/json')) {
+      || !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?$/i.test(request.headers['content-type'] ?? ''))) {
       return reply(response, 403, { error: '仅允许本地工作台提交' });
     }
     try {
@@ -90,20 +96,28 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
         return reply(response, 401, { error: '请通过控制台启动链接访问' });
       }
       const asset = assets.get(pathname);
-      if (method === 'GET' && asset) {
+      if (asset) {
+        if (method !== 'GET') return methodNotAllowed(response, 'GET');
         const [file, type] = asset;
         const bytes = readFileSync(new URL('./public/' + file, import.meta.url));
         response.writeHead(200, { 'content-type': type });
         return response.end(bytes);
       }
-      if (method === 'GET' && pathname === '/api/tools') return reply(response, 200, listTools());
+      if (pathname === '/api/tools') {
+        if (method !== 'GET') return methodNotAllowed(response, 'GET');
+        return reply(response, 200, listTools());
+      }
       if (pathname === '/api/tasks') {
         if (method === 'GET') {
           const category = url.searchParams.get('category');
           const status = url.searchParams.get('status');
           const tasks = core.listTasks().filter(task => (!category || task.challenge_type === category)
             && (!status || task.status === status));
-          if (url.searchParams.get('order') === 'oldest') tasks.reverse();
+          if (url.searchParams.get('order') === 'oldest') {
+            tasks.sort((left, right) => (left.created_at ? Date.parse(left.created_at) : Infinity)
+              - (right.created_at ? Date.parse(right.created_at) : Infinity)
+              || left.task_id.localeCompare(right.task_id));
+          }
           return reply(response, 200, tasks);
         }
         if (method === 'POST') {
@@ -115,14 +129,27 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
           if (decision.preflight_status === 'PASSED') permits.set(decision.task_id, decision);
           return reply(response, 201, decision);
         }
+        return methodNotAllowed(response, 'GET, POST');
       }
       const match = taskPath.exec(pathname);
       if (!match) return reply(response, 404, { error: '页面或任务不存在' });
       const [, id, action] = match;
-      const detail = core.taskDetail(id);
+      let detail;
+      try {
+        detail = core.taskDetail(id);
+        if (!detail && lstatSync(join(root, id), { throwIfNoEntry: false })?.isDirectory()) {
+          throw new Error('Invalid task evidence chain');
+        }
+      } catch (error) {
+        if (!(error instanceof SyntaxError) && error.message !== 'Invalid task evidence chain') throw error;
+        return reply(response, 409, {
+          error: '任务证据损坏，需要人工恢复', error_category: 'INVALID_EVIDENCE'
+        });
+      }
       if (!detail) return reply(response, 404, { error: '任务不存在' });
       const permit = permits.get(id);
-      if (method === 'GET' && (!action || action === 'report')) {
+      if (!action || action === 'report') {
+        if (method !== 'GET') return methodNotAllowed(response, 'GET');
         const data = {
           ...detail, live: Boolean(permit), tool_allowlist: permit?.tool_allowlist ?? [],
           files: fileList(root, detail),
@@ -134,7 +161,7 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
         return reply(response, 200, data, action === 'report'
           ? { 'content-disposition': 'attachment; filename="' + id + '.json"' } : {});
       }
-      if (method !== 'POST' || !action || action === 'report') return reply(response, 405, { error: '操作不受支持' });
+      if (method !== 'POST') return methodNotAllowed(response, 'POST');
       if (!permit) return reply(response, 409, { error: '任务没有本进程执行许可' });
       const input = await body(request);
       if (action === 'execute') {
@@ -163,6 +190,15 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
         evidence_id: error.evidence_id ?? null
       });
     }
+  }
+  const server = createServer({ requestTimeout: 15000 }, async (request, response) => {
+    const pending = handleRequest(request, response);
+    pendingRequests.add(pending);
+    try {
+      await pending;
+    } finally {
+      pendingRequests.delete(pending);
+    }
   });
   server.listen(port, host);
   await once(server, 'listening');
@@ -171,11 +207,15 @@ export async function startConsole({ dataRoot = 'data', fixtureRoot = 'fixtures/
     url: origin,
     launchUrl: origin + '/#' + token,
     close() {
-      closing ??= new Promise((done, reject) => {
-        server.close(error => {
-          if (error) return reject(error);
-          try { core.close(); done(); } catch (failure) { reject(failure); }
-        });
+      serverClosed ??= new Promise((done, reject) => {
+        server.close(error => error ? reject(error) : done());
+      });
+      closing ??= serverClosed.then(async () => {
+        await Promise.allSettled(pendingRequests);
+        core.close();
+      }).catch(error => {
+        closing = undefined;
+        throw error;
       });
       return closing;
     }
